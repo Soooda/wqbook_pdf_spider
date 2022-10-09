@@ -176,12 +176,12 @@ $ pip install pyautogui
   <img src='img/23.png'></img>
 </p>
 
-点击图标之后会打开一个二维码界面，让我们扫描。而对于代码来说，我们只需要使用time.sleep()（我设置默认等60秒）等待一段时间扫码即可。
+点击图标之后会打开一个二维码界面，让我们扫描。而对于代码来说，我们只需要使用`time.sleep()`（我设置默认等60秒）等待一段时间扫码即可。
 
 ```python
 def wechat_signin(driver, wait_time=60):
     '''
-    wait_time: how long the driver waits at the QR code scanning page
+    wait_time: 等待用户扫描二维码的时间。
     '''
     signin = driver.find_element(by=By.XPATH, value='//*[@id="app"]/header/div[2]/span[2]')
     signin.click()
@@ -191,9 +191,153 @@ def wechat_signin(driver, wait_time=60):
     wechat.click()
     time.sleep(wait_time)
 ```
+> 定位按钮的位置，我使用的XPATH。
+>
+> 你只需要在Inspector里找到按钮的元素，右键复制XPATH粘贴到`value`里即可。
+> ![](img/24.png)
+
+## 机制分析
+接下来，就是重头戏——爬取高清的图片。但是，在介绍方法之前，我们先来看一下文泉书局阅读器的机制。
+
+### 1. 高清图片加载
+首先，只有我们的鼠标滚轮滚到对应的页码，那一页的内容才会显示高清的图片。否则，则以缩略图存在。
+<p align="center">
+  <img src='img/25.png'></img>
+</p>
+> 如图，我们这第七页时，`page-lmg`这个`<div>`下才有图片。而第十三页则是一个空的container。
+
+### 2. 图片分割
+对比之前参考文章的描述，这个特征是文泉书局最近更新的反下载策略。
+
+每一个高清页并不是以一张图片的形式存在的，比如案例的图书，被等分成了六份，而且是乱序的摆放的（第一个`<img>`对应的并不是第一等分）。
+> 一页的完整尺寸是1440x2026，但被分成了6个240x2026的部分。
+
+同时，我们直接通过`src`里的链接去获取原图，会被拒绝访问。（后台应该只允许获取一次）
+<p align="center">
+  <img src='img/26.png'></img>
+</p>
+
+但是，我们可以对图片右键另存为，将图片保存！
+
+<p align="center">
+  <img src='img/27.png'></img>
+  <img src='img/28.png'></img>
+  <img src='img/29.png'></img>
+  <img src='img/30.png'></img>
+</p>
+
+保存下来的，的的确确是高清的webg图片。
+
+## 解决途径
+根据以上观察，我构思了这样一个解决方案：**跳转到页数n（保证高清图片的加载）** ⇒ **获取每个细分图片的信息，并排序** ⇒ **按照顺序对每个细分图片进行右键保存的操作** ⇒ **跳转到下一页**。
+
+本部分所有代码来自于`download.py`这个文件，对于这个文件你只需修改第九到十一行即可使用：
+```python
+PAGES = int #书的总页数
+ADDRESS = str #书的网址
+driver = webdriver.Chrome(str) #括号内写你的chromedriver.exe所在的位置
+```
+> 在Anaconda Powershell里输`python download.py`即可运行。
+
+### 跳转到页数n
+```python
+pages = driver.find_elements(by=By.CLASS_NAME, value='page-img-box')
+
+def go_to_page_n(driver, n):
+    '''
+    使用鼠标滚轮跳转到对应页数。
+    '''
+    ActionChains(driver)\
+        .scroll_to_element(pages[n])\
+        .perform()
+```
+这里我们使用了Selenium里的Actions API里的[滚轮操作](https://selenium.dev/documentation/webdriver/actions_api/wheel/#scroll-to-element)。（在阅读器里，鼠标滚轮的滚动实现了翻页。而每一页的container都对应了`page-img-box`这个class）
+
+### 排序
+<p align="center">
+  <img src='img/31.png'></img>
+</p>
+细看每一个细分的图片，我们可以发现哪怕它们是乱序的，但是每一个`<img>`的`lef`t的值其实就暴露了排列的先后，所以我们可以根据每一个`left`的值从小到大排序，来获得保存顺序。
+
+我仅使用了一个随手写的排序算法（O(n^2）效率显然不好，但对于我的目的而言绰绰有余了）。最后，将整理结果存在`order`这个list里。
+```python
+# 将每一个细分图片找到，统一存在pieces这个list里
+img = pages[page].find_element(by=By.CLASS_NAME, value='page-lmg')
+pieces = img.find_elements(by=By.TAG_NAME, value='img')
+
+# 根据“left"的css值来排序
+order = []
+row = []
+for piece in pieces:
+    row.append(float(piece.value_of_css_property('left')[:-2]))
+
+while len(order) != len(row):
+    for n in range(len(row)):
+        if n not in order:
+            mini = row[n]
+
+    i = 0
+    while i < len(row):
+        if row[i] < mini and i not in order:
+            mini = row[i]
+        i += 1
+    # 找到最小
+    order.append(row.index(mini))
+```
+### 下载
+下载部分，由于源地址无法第二次访问使得之前那些文章的方法全部失效。而我采用的解决方法是，用程序模拟真人的右键保存操作。
+
+我们这次使用Selenium Actions API里的[鼠标右键操作](https://www.selenium.dev/documentation/webdriver/actions_api/mouse/#context-click)定位到对应的戏份图片并点击右键。由于，Selenium仅仅只能控制浏览器的部分，所以之后的操作我们需要借助Pyautogui的帮助，对于另存为来说，我们在右键之后只需按键盘的方向下键两次，再敲两次回车即可将图片保存到我们默认的保存位置（你当然可以修改代码，添加更复杂的操作来修改下载路径，但是我认为全部下载完后统一转移更省事）。
+
+<p align="center">
+  <img src='img/32.png'></img>
+</p>
+
+```python
+def right_click_save_as(segment):
+    '''
+    segment: 我们想另存为所对应的<img>
+    '''
+    ActionChains(driver)\
+        .context_click(segment)\
+        .perform()
+
+    pyautogui.typewrite(['down', 'down', 'enter', 'enter'], interval=0.5) #键盘输入下，下，回车，回车
+    time.sleep(0.5)
+```
+
+## 合并大图
+本部分代码全部存于`merge.py`文件中。
+
+对于图片合并，我们使用[Pillow](https://pillow.readthedocs.io/en/stable/index.html)这个Package。在Anaconda命令行中输入`conda install pillow`来安装。
+
+我将前一部分下载下来的子图全部移动到`merge.py`所在目录下的`temp`文件夹。
+
+<p align="center">
+  <img src='img/33.png'></img>
+</p>
+
+爬下来的图会有一下特征，默认另存为的文件名是该图片所对应的页数，又因为是六等分，所以Windows会自动在文件名后面添加序号。所以，合并图片我们从左到右的顺序应该是：
+
+<p align="center">
+  <img src='img/34.png'></img>
+</p>
+
+直接在命令行中运行`python merge.py`即可。
+
+对于`merge.py`你只需修改第三到五行：
+```python
+PAGES = 320 #总页数
+SPLIT = 6 #等分数
+sub_image_dir = 'temp/' #爬下的子图所在的文件夹路径
+```
+运行完成后，你就获得了一页页完整的图片啦！
+<p align="center">
+  <img src='img/35.png'></img>
+</p>
 
 ## 生成PDF
-开头，已经说了之后的部分我不过多赘述，我生成PDF的代码都在gen_pdf.py里，大家感兴趣可以自行参考。
+开头，已经说了之后的部分我不过多赘述，我生成PDF的代码都在`gen_pdf.py`里，大家感兴趣可以自行参考。
 
 ## References引用
 * [xxlllq/PDFBooks](https://github.com/xxlllq/PDFBooks)
