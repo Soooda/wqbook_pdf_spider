@@ -12,7 +12,7 @@ driver = webdriver.Chrome('C:\\src\\webdriver\\chromedriver.exe') #括号内写�
 
 def wechat_signin(driver, wait_time=60):
     '''
-    wait_time: how long the driver waits at the QR code scanning page
+    wait_time: 等待用户扫描二维码的时间。
     '''
     signin = driver.find_element(by=By.XPATH, value='//*[@id="app"]/header/div[2]/span[2]')
     signin.click()
