@@ -204,6 +204,7 @@ def wechat_signin(driver, wait_time=60):
 <p align="center">
   <img src='img/25.png'></img>
 </p>
+
 > 如图，我们这第七页时，`page-lmg`这个`<div>`下才有图片。而第十三页则是一个空的container。
 
 ### 2. 图片分割
@@ -257,9 +258,11 @@ def go_to_page_n(driver, n):
 <p align="center">
   <img src='img/31.png'></img>
 </p>
-细看每一个细分的图片，我们可以发现哪怕它们是乱序的，但是每一个`<img>`的`lef`t的值其实就暴露了排列的先后，所以我们可以根据每一个`left`的值从小到大排序，来获得保存顺序。
+
+细看每一个细分的图片，我们可以发现哪怕它们是乱序的，但是每一个`<img>`的`left`的值其实就暴露了排列的先后，所以我们可以根据每一个`left`的值的大小，来获得保存顺序。
 
 我仅使用了一个随手写的排序算法（O(n^2）效率显然不好，但对于我的目的而言绰绰有余了）。最后，将整理结果存在`order`这个list里。
+
 ```python
 # 将每一个细分图片找到，统一存在pieces这个list里
 img = pages[page].find_element(by=By.CLASS_NAME, value='page-lmg')
@@ -287,7 +290,7 @@ while len(order) != len(row):
 ### 下载
 下载部分，由于源地址无法第二次访问使得之前那些文章的方法全部失效。而我采用的解决方法是，用程序模拟真人的右键保存操作。
 
-我们这次使用Selenium Actions API里的[鼠标右键操作](https://www.selenium.dev/documentation/webdriver/actions_api/mouse/#context-click)定位到对应的戏份图片并点击右键。由于，Selenium仅仅只能控制浏览器的部分，所以之后的操作我们需要借助Pyautogui的帮助，对于另存为来说，我们在右键之后只需按键盘的方向下键两次，再敲两次回车即可将图片保存到我们默认的保存位置（你当然可以修改代码，添加更复杂的操作来修改下载路径，但是我认为全部下载完后统一转移更省事）。
+我们这次使用Selenium Actions API里的[鼠标右键操作](https://www.selenium.dev/documentation/webdriver/actions_api/mouse/#context-click)定位到对应的细分图片并点击右键。由于，Selenium仅仅只能控制浏览器的部分，所以之后的操作我们需要借助Pyautogui的帮助，对于另存为来说，我们在右键之后只需按键盘的方向下键两次，再敲两次回车即可将图片保存到我们默认的保存位置（你当然可以修改代码，添加更复杂的操作来修改下载路径，但是我认为全部下载完后统一转移更省事）。
 
 <p align="center">
   <img src='img/32.png'></img>
@@ -317,7 +320,7 @@ def right_click_save_as(segment):
   <img src='img/33.png'></img>
 </p>
 
-爬下来的图会有一下特征，默认另存为的文件名是该图片所对应的页数，又因为是六等分，所以Windows会自动在文件名后面添加序号。所以，合并图片我们从左到右的顺序应该是：
+爬下来的图会有以下特征，默认另存为的文件名是该图片所对应的页数，又因为是六等分，所以Windows会自动在文件名后面添加序号。所以，合并图片我们从左到右的顺序应该是：
 
 <p align="center">
   <img src='img/34.png'></img>
