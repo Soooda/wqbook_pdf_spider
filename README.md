@@ -340,7 +340,7 @@ sub_image_dir = 'temp/' #爬下的子图所在的文件夹路径
 </p>
 
 ## 生成PDF
-开头，已经说了之后的部分我不过多赘述，我生成PDF的代码都在`gen_pdf.py`里，大家感兴趣可以自行参考。
+开头已经说了之后的部分我不过多赘述，我生成PDF的代码都在`gen_pdf.py`里，大家感兴趣可以自行参考。
 
 ## References引用
 * [xxlllq/PDFBooks](https://github.com/xxlllq/PDFBooks)
